@@ -1,27 +1,68 @@
 package com.example.zzz;
 
+import java.io.ByteArrayOutputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.text.DecimalFormat;
 import java.util.Collection;
 import java.util.List;
 
+import android.R.color;
 import android.R.integer;
 import android.R.string;
+import android.annotation.SuppressLint;
+import android.annotation.TargetApi;
 import android.app.Activity;
+import android.app.ActivityManager;
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothManager;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Color;
+import android.hardware.Camera;
+import android.net.Uri;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
+import android.os.Environment;
+import android.os.Handler;
+import android.os.Message;
+import android.os.StatFs;
+import android.os.SystemClock;
 import android.preference.CheckBoxPreference;
 import android.provider.Settings;
+import android.support.v4.app.NotificationCompat;
+import android.text.format.Formatter;
 import android.util.Base64;
 import android.util.Log;
+import android.view.Surface;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.TextView;
+
+
 import com.sparkle.webservice.Defaults;
 import com.sparkle.webservice.WebServer;
+
+import de.tavendo.autobahn.WebSocketConnection;
+import de.tavendo.autobahn.WebSocketConnectionHandler;
+import de.tavendo.autobahn.WebSocketException;
 /**
  * AUTHER wzb<wangzhibin_x@foxmail.com> 2016-2-18下午04:16:50
  */
@@ -34,7 +75,12 @@ public class MainActivity extends Activity implements OnClickListener {
 	StringBuilder sb=null;
 	CheckBoxPreference cbp;
 	Context mContext;
-	
+	TextView tv1;
+	WebSocketConnection wsc;
+	public BluetoothAdapter mBluetoothAdapter;
+	public BluetoothManager bluetoothManager;
+	private final int REQUEST_ENABLE_BT = 2;
+	private NotificationManager		mNotifMan;
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -45,14 +91,12 @@ public class MainActivity extends Activity implements OnClickListener {
 		btn1 = (Button) findViewById(R.id.btn1);
 		et1 = (EditText) findViewById(R.id.et1);
 		btn1.setOnClickListener(this);
-		btn2.setOnClickListener(new OnClickListener() {
-			
-			@Override
-			public void onClick(View v) {
-				// TODO Auto-generated method stub
-				
-			}
-		});
+		
+		btn2 = (Button) findViewById(R.id.btn2);
+		btn2.setOnClickListener(this);
+		tv1=(TextView)findViewById(R.id.tv1);
+		wsc=new WebSocketConnection();
+		mNotifMan = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
 		//boolean xxx=setWifiApEnabled(true);
 		//Log.d("wzb","xx="+xxx);
 		//initWebServer();
@@ -64,10 +108,47 @@ public class MainActivity extends Activity implements OnClickListener {
 //		DecimalFormat df = new DecimalFormat("#.0"); 
 //		String bg_value=df.format((double)bg/18);
 //		Log.d("wzb",""+bg_value);
-		String str[]=new String[]{};
-		for(int i=0;i<str.length;i++){
-			
-		}
+	}
+	
+	void con(){
+		try {  
+			  
+            wsc.connect("ws://120.76.47.120:8122",  
+                    new WebSocketConnectionHandler() {  
+                  
+                        @Override  
+                        public void onBinaryMessage(byte[] payload) {  
+                            Log.d("wzb","onBinaryMessage size="  
+                                    + payload.length);  
+                        }  
+  
+                        @Override  
+                        public void onClose(int code, String reason) {  
+                         Log.d("wzb","onClose reason=" + reason);  
+                        }  
+  
+                        @Override  
+                        public void onOpen() {  
+                            Log.d("wzb","onOpen");  
+                            // wsc.sendTextMessage("Hello!");  
+                            // wsc.disconnect();  
+                        }  
+                        @Override  
+                        public void onRawTextMessage(byte[] payload) {  
+                            Log.d("wzb","onRawTextMessage size="  
+                                    + payload.length);  
+                        }  
+  
+                        @Override  
+                        public void onTextMessage(String payload) {  
+                            Log.d("wzb","onTextMessage" + payload);  
+                        }  
+  
+                    });  
+        } catch (WebSocketException e) {  
+            // TODO Auto-generated catch block  
+            e.printStackTrace();  
+        }  
 	}
 	
 	void base64StringToByte(){
@@ -175,22 +256,288 @@ public class MainActivity extends Activity implements OnClickListener {
 	 
 	    return unicode.toString();
 	}
+	
+	public String getSdTotalSize(Context context){
+	    StatFs sf = new StatFs("/mnt/sdcard");
+	    long blockSize = sf.getBlockSize();
+	    long totalBlocks = sf.getBlockCount();
+	    return Formatter.formatFileSize(context, blockSize*totalBlocks);
+	    }
+
+	    public String getSdAvailableSize(Context context){
+	    StatFs sf = new StatFs("/mnt/sdcard");
+	    long blockSize = sf.getBlockSize();
+	    long availableBlocks = sf.getAvailableBlocks();
+	    return Formatter.formatFileSize(context, blockSize*availableBlocks);
+	    }
+	
+	void getUAinfo(){
+		
+		WebView mWebView=new WebView(mContext);
+		WebSettings mWebSettings=mWebView.getSettings();
+		String mUAString=mWebSettings.getUserAgentString();
+		Log.d("wzb","uastring="+mUAString);
+		tv1.setText(mUAString);
+	}
+	
+	void openfolder(){
+		Intent intent = new Intent();
+
+		//浏览器的主Activity
+		intent.setComponent(new ComponentName("com.mediatek.filemanager",
+		"com.mediatek.filemanager.FileManagerOperationActivity"));
+		String path="";
+		try {
+			path = Environment.getExternalStorageDirectory()
+			.getCanonicalPath().toString()
+			+ "/录音文件";
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		intent.putExtra("select_path", path);
+		startActivity(intent);
+	}
+	
+	Runnable runnable=new Runnable() {
+		
+		@Override
+		public void run() {
+			// TODO Auto-generated method stub
+			
+		}
+	};
+	
+	Handler mHandler=new Handler(){
+		@Override
+		public void handleMessage(Message msg) {
+			// TODO Auto-generated method stub
+			super.handleMessage(msg);
+			switch(msg.what){
+			case 12:
+				doSnap();
+				break;
+			case 13:
+				//finish();
+				//System.exit(0);
+				if (mCamera != null) {
+					mCamera.stopPreview();
+					mCamera.setPreviewCallback(null);
+					mCamera.release();
+				}
+				break;
+				default:
+					break;
+			}
+		}
+	};
+	private static int currentCamera = Camera.CameraInfo.CAMERA_FACING_BACK;
+	
+	@SuppressLint("NewApi")
+	public void setCameraDisplayOrientation() {
+		Camera.CameraInfo info = new Camera.CameraInfo();
+		mCamera.getCameraInfo(currentCamera, info);
+		int rotation = this.getWindowManager().getDefaultDisplay()
+				.getRotation();
+		int degrees = 0;
+		switch (rotation) {
+		case Surface.ROTATION_0:
+			degrees = 0;
+			break;
+		case Surface.ROTATION_90:
+			degrees = 90;
+			break;
+		case Surface.ROTATION_180:
+			degrees = 180;
+			break;
+		case Surface.ROTATION_270:
+			degrees = 270;
+			break;
+		}
+		int resultA = 0, resultB = 0;
+		if (currentCamera == Camera.CameraInfo.CAMERA_FACING_BACK) {
+			resultA = (info.orientation - degrees + 360) % 360;
+			resultB = (info.orientation - degrees + 360) % 360;
+			mCamera.setDisplayOrientation(resultA);
+		} else {
+			resultA = (360 + 360 - info.orientation - degrees) % 360;
+			resultB = (info.orientation + degrees) % 360;
+			mCamera.setDisplayOrientation(resultA);
+		}
+		Camera.Parameters params = mCamera.getParameters();
+		params.setRotation(resultB);
+		mCamera.setParameters(params);
+	}
+	
+	
+	private ImageView mImageView;
+	private Camera mCamera;
+	@SuppressLint("NewApi")
+	public void doSnap() {
+		mCamera=Camera.open(Camera.CameraInfo.CAMERA_FACING_BACK);
+		if (mCamera == null) {
+		
+				Log.d("wzb", "tried to snap when camera was inactive");
+			return;
+		}
+		Log.d("wzb","do snap=================");
+		Camera.Parameters params = mCamera.getParameters();
+		List<Camera.Size> sizes = params.getSupportedPictureSizes();
+		Camera.Size size = sizes.get(0);
+		for (int i = 0; i < sizes.size(); i++) {
+			if (sizes.get(i).width > size.width)
+				size = sizes.get(i);
+		}
+		params.setPictureSize(size.width, size.height);
+		mCamera.setParameters(params);
+		Camera.PictureCallback jpegCallback = new Camera.PictureCallback() {
+			public void onPictureTaken(byte[] data, Camera camera) {
+				FileOutputStream outStream = null;
+				try {
+					String filename = String.format(
+							"/sdcard/img_wear_%d.jpg",
+							System.currentTimeMillis());
+					outStream = new FileOutputStream(filename);
+					outStream.write(data);
+					outStream.close();
+		
+						Log.d("wzb", "wrote bytes: " + data.length);
+					sendBroadcast(new Intent(
+							Intent.ACTION_MEDIA_SCANNER_SCAN_FILE,
+							Uri.parse("file://" + filename)));
+	
+					//mCamera.startPreview();
+				} catch (FileNotFoundException e) {
+					e.printStackTrace();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		};
+		setCameraDisplayOrientation();
+		mCamera.startPreview();
+		mCamera.takePicture(null, null, jpegCallback);
+		mHandler.sendEmptyMessageDelayed(13, 1000);
+	}
+
 
 	@Override
 	public void onClick(View v) {
 		// TODO Auto-generated method stub
 		switch (v.getId()) {
 		case R.id.btn1:
-			str1=et1.getText().toString();
-			Log.d("wzb",""+string2Unicode(str1));
+			//str1=et1.getText().toString();
+			//Log.d("wzb",""+string2Unicode(str1));
 			//Context context = getApplicationContext();
 			//WebServer.Stop(context);
+			//mContext.sendBroadcast(new Intent("com.android.custom.nine_longpress"));
+			//doSnap();
+			//wsc.sendTextMessage("wsc\n");
+			//enable_bt();
+			notify_normal_moreLine();
+			break;
+		case R.id.btn2:
+			//getUAinfo();
+			//openfolder();
+			int xx=mBluetoothAdapter.getScanMode();
+			Log.d("wzb","xx="+xx);
 			break;
 
 		default:
+			android.os.SystemClock.sleep(1000);
 			break;
 		}
+		
 
 	}
+	private NotifyUtil currentNotify;
+	private int requestCode = (int) SystemClock.uptimeMillis();
+	
+	private void notify_normal_moreLine() {
+		final Uri uri = Uri.parse("http://www.baidu.com");  
+		Intent intent = new Intent(Intent.ACTION_VIEW, uri); 
+		intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+      PendingIntent pIntent = PendingIntent.getActivity(mContext,
+              requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+         //startActivity(intent);  
+        //设置想要展示的数据内容
+//        Intent intent = new Intent(mContext, OtherActivity.class);
+//        intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+//        PendingIntent pIntent = PendingIntent.getActivity(mContext,
+//                requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+		//PendingIntent pIntent=null;
+        int smallIcon = R.drawable.ic_launcher;
+        String ticker = "您有一条新通知";
+        String title = "朱立伦请辞国民党主席 副主席黄敏惠暂代党主席";
+        String content = "play.google.com/store/apps/developer?id=Microsoft+Corporation据台湾“中央社”报道，国民党主席朱立伦今天(18日)向中常会报告，为败选请辞党主席一职，他感谢各位中常委的指教包容，也宣布未来党务工作由副主席黄敏惠暂代，完成未来所有补选工作。";
+        //实例化工具类，并且调用接口
+        NotifyUtil notify2 = new NotifyUtil(mContext, 2);
+        notify2.notify_normail_moreline(pIntent, smallIcon, ticker, title, content, true, true, false);
+        currentNotify = notify2;
+    }
+	
+	private boolean setBluetoothScanMode(BluetoothAdapter ba,int scanMode){
+	    Method method = null;
+	    //final BluetoothAdapter btAdapter = BluetoothAdapter.getDefaultAdapter();;
+	    final BluetoothAdapter btAdapter=ba;
+	    if(!btAdapter.isEnabled()){
+	        Log.d("wzb", "BT adapter is off, turning on");
+	        btAdapter.enable();
+	    }
+
+	    try {
+	        method = btAdapter.getClass().getMethod("setScanMode", int.class);
+	    } catch (SecurityException e) {
+	        return false;
+	    } catch (NoSuchMethodException e) {
+	        return false;
+	    }
+
+	    try {
+	      method.invoke(btAdapter, scanMode);
+	    } catch (IllegalArgumentException e) {
+	        return false;
+	    } catch (IllegalAccessException e) {
+	        return false;
+	    } catch (InvocationTargetException e) {
+	        return false;
+	    }
+		boolean start=btAdapter.isDiscovering();
+		Log.d("wzb","start="+start);
+		
+		int xx=btAdapter.getScanMode();
+		Log.d("wzb","xx="+xx);
+	    return true;
+	}
+	
+	
+	@TargetApi(18)
+	void enable_bt(){
+		bluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
+		mBluetoothAdapter = bluetoothManager.getAdapter();
+		// 蓝牙是否开启
+		if (null == mBluetoothAdapter || !mBluetoothAdapter.isEnabled()) {
+//			Intent enableIntent = new Intent(
+//					BluetoothAdapter.ACTION_REQUEST_ENABLE);
+//			startActivityForResult(enableIntent, REQUEST_ENABLE_BT);
+			mBluetoothAdapter.enable();
+//			Intent discoverableIntent = new Intent( BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE); discoverableIntent .putExtra( BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 60*60*24);
+//			startActivityForResult(discoverableIntent, 2);
+			
+		}
+		mContext.sendBroadcast(new Intent("com.android.custom.bt_discoverable"));
+			//boolean ret=setBluetoothScanMode(mBluetoothAdapter,BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE);
+			//Log.d("wzb","ret="+ret);
+
+	
+	}
+	
+
+	
+
+	
+	
+	
+
 
 }
