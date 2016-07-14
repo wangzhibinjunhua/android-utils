@@ -1,6 +1,6 @@
 # android-utils
 - Powered by wzb@lib-x.com
-- [lib-x.com](lib-x.com)  
+- [lib-x.com](http://lib-x.com)  
 
 ## 项目结构
 - 1. 因为eclips工程原因,项目结构为 src res  为eclipse工程结构一样
